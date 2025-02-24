@@ -1,0 +1,71 @@
+Read KML files to extract map information 
+Function to load csv
+```{r Recover data from KML files, eval=FALSE, include=FALSE}
+load_csv = function(csv_file) {
+  df = read_csv(csv_file)
+  return(df)
+}
+
+load_kmz = function(kmz_file) {
+  temp_dir = tempdir()
+  unzip(kmz_file, exdir = temp_dir)
+  kml_file = list.files(temp_dir, pattern = "\\.kml$", full.names = TRUE)[1]
+  kml_data = st_read(kml_file)
+  return(kml_data)
+}
+
+convert_to_sf_points = function(df) {
+  points_sf = st_as_sf(df, coords = c("Longitude", "Latitude"), crs = 4326)
+  return(points_sf)
+}
+
+check_points_in_kml = function(points_sf, kml_sf) {
+  matched_points = st_join(points_sf, kml_sf, join = st_within)
+  return(matched_points)
+}
+
+compare_coordinates = function(csv_file, kml_file) {
+  df = load_csv(csv_file)
+  kml_sf = load_kmz(kml_file)
+  points_sf = convert_to_sf_points(df)
+  matched_results = check_points_in_kml(points_sf, kml_sf)
+  return(matched_results)
+}
+
+```
+
+Load KMZ data
+```{r Create full metadata, eval=FALSE, include=FALSE}
+
+KML_data = "ecoregion2009.kmz"
+KML_data_full = "us_2003_simple2_pesado.kmz"
+
+KMZ_points = compare_coordinates(geo_loc_data, KML_data)
+
+sf_use_s2(FALSE)
+
+KMZ_points_full = compare_coordinates(geo_loc_data, KML_data_full)
+
+print(KMZ_points)
+print(KMZ_points_full)
+
+KMZ_points_df = as.data.frame(KMZ_points)
+KMZ_points_full_df = as.data.frame(KMZ_points_full)
+
+KMZ_points_df = KMZ_points_df |>
+  rename(Ecoregion = Name) |>
+  rename(sampleID = SampleID) |>
+  dplyr::select(sampleID,Ecoregion)
+
+KMZ_points_full_df = KMZ_points_full_df |>
+  rename(Ecosystem = Name) |>
+  rename(sampleID = SampleID) |>
+  dplyr::select(sampleID,Ecosystem)
+
+Oct_metadata = metadata |> 
+  left_join(KMZ_points_df) |>
+  left_join(KMZ_points_full_df)
+
+
+#write.csv(Oct_metadata, "Metadata/metadata_full.csv")
+```
