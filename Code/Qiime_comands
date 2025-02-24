@@ -1,0 +1,275 @@
+#Qiime commands to process fastq data for soil atlas metanalysis
+#Emanuel Martínez-Ugalde
+#24-06-2024
+
+###
+#Import single-end sequences with quality
+
+#Single end
+qiime tools import --type 'SampleData[SequencesWithQuality]' --input-path Manifest_data/[SOME NAME].txt --output-path Imported_data/[SOME NAME].qza --input-format SingleEndFastqManifestPhred33V2
+
+qiime demux summarize --i-data Imported[NAME].qza --o-visualization Imported_viz/[NAME].qzv
+###
+
+
+###
+#Removing amplification primers according to data available on each publication 
+#V1-V2 (27 F AGAGTTTGATYMTGGCTCAG/ 338 R GCTGCCTCCCGTAGGAGT)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front AGAGTTTGATYMTGGCTCAG --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V3-V4 (341 F CCTACGGGNGGCWGCAG / 805 R GACTACHVGGGTATCTAATCC ) 
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front CCTACGGGNGGCWGCAG --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V3-V4 (338 F ACTYCTACGGRAGGCWGC / 806 R GGACTACVSGGGTATCTAAT)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front ACTYCTACGGRAGGCWGC --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V3-V4 (337 F GACTCCTACGGGAGGCWGCAG / 805 R GACTACCAGGGTATCTAATCC)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front GACTCCTACGGGAGGCWGCAG --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V3-V4 (S-D-Bact-0341-b-S-17 F CCTACGGGNGGCWGCAG / S-D-Bact-0785-a-A-21 R GACTACHVGGGTATCTAATCC)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front CCTACGGGNGGCWGCAG --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V3-V4 (357 F CTCCTACGGGAGGCAGCAG / CD R CTTGTGCGGGCCCCCGTCAATTC)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front CTCCTACGGGAGGCAGCAG --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V4 (515 F GTGCCAGCMGCCGCGGTAA / 806 R GGACTACHVGGGTWTCTAAT)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front GTGCCAGCMGCCGCGGTAA --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+#V4 (519 F CAGCMGCCGCGGTAA / 785 R GACTACHVGGGTATCTAATCC)
+qiime cutadapt trim-single --i-demultiplexed-sequences [PATH TO].qza --p-front CAGCMGCCGCGGTAA --p-quality-cutoff-5end 20 --p-quality-cutoff-3end 20 --o-trimmed-sequences [DIR TO].qza --p-no-discard-untrimmed
+
+qiime demux summarize --i-data [PATH TO QZA FILE].qza --o-visualization [NAME].qzv
+###
+
+
+###
+#Sequence quality control
+#Trim length depends on the starting place for the forward primer
+#Trunc length depends on the quality of the forward read ranging from 220-300 bp
+
+qiime dada2 denoise-single --i-demultiplexed-seqs [DIR PATH].qza --p-n-threads 6 --p-trim-left [NUM] --p-trunc-len [NUM] --o-representative-sequences Rep_Seqs/[NAME]_rep_seq.qza --o-table Table_ASV/[NAME]_table.qza --o-denoising-stats Denoise_Stat/[NAME]_denoise_stats.qza
+
+qiime feature-table summarize --i-table table.qza --o-visualization table.qzv
+###
+
+
+###
+# Navie-classifier creation for each 16S rRNA region (V1-V2 / V3-V4 / V4)
+
+#Obtaining Silva DB files (V138.1)
+
+qiime rescript get-silva-data --p-version '138.1' --p-target 'SSURef_NR99' --p-rank-propagation --p-ranks domain kingdom phylum class subclass order family genus o-silva-sequences S-138.1-ssu-nr99-rna-seqs.qza --o-silva-taxonomy S-138.1-ssu-nr99-tax.qza
+
+#Convert RNA Silva seqs to DNA
+qiime rescript reverse-transcribe --i-rna-sequences S-138.1-ssu-nr99-rna-seqs.qza --o-dna-sequences S-138.1-ssu-nr99-seqs.qza
+
+#Remove low quality seqs
+qiime rescript cull-seqs --i-sequences S-138.1-ssu-nr99-seqs.qza --o-clean-sequences S-138.1-ssu-nr99-seqs-cleaned.qza
+
+#Filter seqs based on length and tax to avoid including short sequences thac inflence annotations
+qiime rescript filter-seqs-length-by-taxon --i-sequences S-138.1-ssu-nr99-seqs-cleaned.qza --i-taxonomy S-138.1-ssu-nr99-tax.qza --p-labels Archaea Bacteria Eukaryota --p-min-lens 900 1200 1400 --o-filtered-seqs S-138.1-ssu-nr99-seqs-filt.qza --o-discarded-seqs S-138.1-ssu-nr99-seqs-discard.qza
+
+#Derreplicate the data base
+qiime rescript dereplicate --i-sequences S-138.1-ssu-nr99-seqs-filt.qza --i-taxa S-138.1-ssu-nr99-tax.qza --p-mode 'uniq' --o-dereplicated-sequences S-138.1-ssu-nr99-seqs-derep-uniq.qza --o-dereplicated-taxa S-138.1-ssu-nr99-tax-derep-uniq.qza
+
+#Create a full length classifer
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads  S-138.1-ssu-nr99-seqs-derep-uniq.qza --i-reference-taxonomy S-138.1-ssu-nr99-tax-derep-uniq.qza --o-classifier S-138.1-ssu-nr99-FULL-classifier.qza
+
+#Create specific classifers for each region 
+#First extract the reads from V1-V2 V3-V4 and V4 regions from the Silva data 
+
+#V1-V2
+qiime feature-classifier extract-reads --i-sequences S-138.1-ssu-nr99-seqs-derep-uniq.qza --p-f-primer AGAGTTTGATYMTGGCTCAG --p-r-primer GCTGCCTCCCGTAGGAGT --p-n-jobs 10 --p-read-orientation 'forward' --o-reads S-138.1-ssu-nr99-seqs-27f-338r.qza
+
+#V3-V4
+qiime feature-classifier extract-reads --i-sequences S-138.1-ssu-nr99-seqs-derep-uniq.qza --p-f-primer CCTACGGGNGGCWGCAG --p-r-primer GACTACHVGGGTATCTAATCC --p-n-jobs 10 --p-read-orientation 'forward' --o-reads S-138.1-ssu-nr99-seqs-341f-805r.qza
+
+#V4
+qiime feature-classifier extract-reads --i-sequences S-138.1-ssu-nr99-seqs-derep-uniq.qza --p-f-primer GTGCCAGCMGCCGCGGTAA --p-r-primer GGACTACHVGGGTWTCTAAT --p-n-jobs 10 --p-read-orientation 'forward' --o-reads S-138.1-ssu-nr99-seqs-515f-806r.qza
+
+#Derreplicate V1-V2
+qiime rescript dereplicate --i-sequences S-138.1-ssu-nr99-seqs-27f-338r.qza --i-taxa S-138.1-ssu-nr99-tax-derep-uniq.qza --p-mode 'uniq' --o-dereplicated-sequences S-138.1-ssu-nr99-seqs-27f-338r-uniq.qza --o-dereplicated-taxa  S-138.1-ssu-nr99-tax-27f-338r-derep-uniq.qza
+
+#Derreplicate V3-V4
+qiime rescript dereplicate --i-sequences S-138.1-ssu-nr99-seqs-341f-805r.qza --i-taxa S-138.1-ssu-nr99-tax-derep-uniq.qza --p-mode 'uniq' --o-dereplicated-sequences S-138.1-ssu-nr99-seqs-341f-805r-uniq.qza --o-dereplicated-taxa  S-138.1-ssu-nr99-tax-341f-805r-derep-uniq.qza
+
+#Derreplicate V4
+qiime rescript dereplicate --i-sequences S-138.1-ssu-nr99-seqs-515f-806r.qza --i-taxa S-138.1-ssu-nr99-tax-derep-uniq.qza --p-mode 'uniq' --o-dereplicated-sequences S-138.1-ssu-nr99-seqs-515f-806r-uniq.qza --o-dereplicated-taxa  S-138.1-ssu-nr99-tax-515f-806r-derep-uniq.qza
+
+#Build V1-V2 classifer
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads S-138.1-ssu-nr99-seqs-27f-338r-uniq.qza --i-reference-taxonomy S-138.1-ssu-nr99-tax-27f-338r-derep-uniq.qza --o-classifier S-138.1-nr99-27f-338r-classifier.qza
+
+#Build V3-V4 classifer
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads S-138.1-ssu-nr99-seqs-341f-805r-uniq.qza --i-reference-taxonomy S-138.1-ssu-nr99-tax-341f-805r-derep-uniq.qza --o-classifier S-138.1-nr99-341f-805r-classifier.qza
+
+#Build V4 classifer
+qiime feature-classifier fit-classifier-naive-bayes --i-reference-reads S-138.1-ssu-nr99-seqs-515f-806r-uniq.qza  --i-reference-taxonomy S-138.1-ssu-nr99-tax-515f-806r-derep-uniq.qza --o-classifier S-138.1-nr99-515f-806r-classifier.qza
+###
+
+
+###
+#Taxonomic profiling
+qiime feature-classifier classify-sklearn  --p-n-jobs 10 --i-classifier Classifier_final/[Classifier name] --i-reads Rep_Seq_filtered/[input_file] --o-classification Taxonomy/[out_file]
+###
+
+
+###
+#Merge ASV tables
+qiime feature-table merge --i-tables Table_ASV/soil_maiz_enrrich_table.qza  \
+--i-tables Table_ASV/soil_marchantia_table.qza  \
+--i-tables Table_ASV/soil_atlas_aee_table.qza  \
+--i-tables Table_ASV/soil_sonora_c4_table.qza  \
+--i-tables Table_ASV/soil_sonora_c3_table.qza  \
+--i-tables Table_ASV/soil_sonora_c2_table.qza  \
+--i-tables Table_ASV/soil_sonora_c1_table.qza  \
+--i-tables Table_ASV/soil_nevado_2_table.qza  \
+--i-tables Table_ASV/soil_nevado_1_table.qza  \
+--i-tables Table_ASV/soil_mesofilo_table.qza  \
+--i-tables Table_ASV/soil_coffe_ll17_table.qza  \
+--i-tables Table_ASV/soil_coffe_s17_table.qza  \
+--i-tables Table_ASV/soil_coffe_s16_table.qza  \
+--i-tables Table_ASV/soil_avo_aee_table.qza  \
+--i-tables Table_ASV/soil_gto_table.qza  \
+--i-tables Table_ASV/soil_trop_tree_table.qza  \
+--i-tables Table_ASV/soil_cordia_table.qza  \
+--i-tables Table_ASV/soil_coffe_table.qza  \
+--i-tables Table_ASV/soil_buffle_table.qza  \
+--i-tables Table_ASV/soil_salin_weath_table.qza  \
+--i-tables Table_ASV/soil_kreast_table.qza  \
+--i-tables Table_ASV/soil_nit_table.qza  \
+--i-tables Table_ASV/soil_dodecandra_table.qza  \
+--i-tables Table_ASV/soil_crust_table.qza  \
+--i-tables Table_ASV/soil_melon_table.qza  \
+--i-tables Table_ASV/soil_mangrove_table.qza  \
+--i-tables Table_ASV/soil_ricinus_table.qza  \
+--i-tables Table_ASV/soil_negritos_table.qza  \
+--i-tables Table_ASV/soil_mezquital_table.qza  \
+--i-tables Table_ASV/soil_atlas_table.qza  \
+--i-tables Table_ASV/soil_ammonium_table.qza  \
+--i-tables Table_ASV/soil_squash_table.qza  \
+--i-tables Table_ASV/soil_maiz_p_table.qza  \
+--i-tables Table_ASV/soil_avo_table.qza  \
+--i-tables Table_ASV/soil_sowing_table.qza  \
+--i-tables Table_ASV/soil_musa_table.qza  \
+--i-tables Table_ASV/soil_orizaba_table.qza  \
+--i-tables Table_ASV/soil_lechugilla_table.qza  \
+--i-tables Table_ASV/soil_twostep_table.qza  \
+--o-merged-table No_filter/Final_merged_table.qza
+
+#Merge rep_seqs
+qiime feature-table merge-seqs --i-data Rep_Seqs/soil_maiz_enrrich_rep_seq.qza \
+--i-data Rep_Seqs/soil_marchantia_rep_seq.qza \
+--i-data Rep_Seqs/soil_atlas_aee_rep_seq.qza \
+--i-data Rep_Seqs/soil_sonora_c4_rep_seq.qza \
+--i-data Rep_Seqs/soil_sonora_c3_rep_seq.qza \
+--i-data Rep_Seqs/soil_sonora_c2_rep_seq.qza \
+--i-data Rep_Seqs/soil_sonora_c1_rep_seq.qza \
+--i-data Rep_Seqs/soil_nevado_2_rep_seq.qza \
+--i-data Rep_Seqs/soil_nevado_1_rep_seq.qza \
+--i-data Rep_Seqs/soil_mesofilo_rep_seq.qza \
+--i-data Rep_Seqs/soil_coffe_ll17_rep_seq.qza \
+--i-data Rep_Seqs/soil_coffe_s17_rep_seq.qza \
+--i-data Rep_Seqs/soil_coffe_s16_rep_seq.qza \
+--i-data Rep_Seqs/soil_avo_aee_rep_seq.qza \
+--i-data Rep_Seqs/soil_gto_rep_seq.qza \
+--i-data Rep_Seqs/soil_trop_tree_rep_seq.qza \
+--i-data Rep_Seqs/soil_cordia_rep_seq.qza \
+--i-data Rep_Seqs/soil_coffe_rep_seq.qza \
+--i-data Rep_Seqs/soil_buffle_rep_seq.qza \
+--i-data Rep_Seqs/soil_saline_weath_rep_seq.qza \
+--i-data Rep_Seqs/soil_krast_rep_seq.qza \
+--i-data Rep_Seqs/soil_nit_rep_seq.qza \
+--i-data Rep_Seqs/soil_dodecandra_rep_seq.qza \
+--i-data Rep_Seqs/soil_crust_rep_seq.qza \
+--i-data Rep_Seqs/soil_melon_rep_seq.qza \
+--i-data Rep_Seqs/soil_mangrove_rep_seq.qza \
+--i-data Rep_Seqs/soil_ricinus_rep_seq.qza \
+--i-data Rep_Seqs/soil_negritos_rep_seq.qza \
+--i-data Rep_Seqs/soil_mezquital_rep_seq.qza \
+--i-data Rep_Seqs/soil_atlas_rep_seq.qza \
+--i-data Rep_Seqs/soil_ammonium_rep_seq.qza \
+--i-data Rep_Seqs/soil_squash_rep_seq.qza \
+--i-data Rep_Seqs/soil_maiz_p_rep_seq.qza \
+--i-data Rep_Seqs/soil_avo_rep_seq.qza \
+--i-data Rep_Seqs/soil_sowing_rep_seq.qza \
+--i-data Rep_Seqs/soil_musa_rep_seq.qza \
+--i-data Rep_Seqs/soil_orizaba_rep_seq.qza \
+--i-data Rep_Seqs/soil_lechugilla_rep_seq.qza \
+--i-data Rep_Seqs/soil_twostep_rep_seq.qza \
+--o-merged-data No_filter/Final_merged_seqs.qza
+
+#Merge taxonomy
+qiime feature-table merge-taxa --i-data Taxonomy/V3-V4/soil_twostep_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_lechugilla_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_orizaba_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_musa_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_sowing_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_buffle_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_avo_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_maiz_p_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_squash_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_ammonium_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_atlas_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_mezquital_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_negritos_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_ricinus_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_marchantia_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_mesofilo_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_nevado_2_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_atlas_aee_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_nevado_1_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_sonora_c1_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_sonora_c2_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_sonora_c3_taxonomy.qza \
+--i-data Taxonomy/V3-V4/soil_sonora_c4_taxonomy.qza \
+--o-merged-data Final_set_atlas/V3-V4/Final_V3-V4_taxonomy.qza
+
+qiime feature-table merge-taxa --i-data Taxonomy/V1-V2/soil_avo_aee_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_coffe_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_cordia_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_trop_tree_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_gto_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_coffe_s16_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_coffe_s17_taxonomy.qza \
+--i-data Taxonomy/V1-V2/soil_coffe_ll17_taxonomy.qza \
+--o-merged-data Final_set_atlas/V1-V2/Final_V1-V2_taxonomy.qza
+
+qiime feature-table merge-taxa --i-data Taxonomy/V4/soil_nit_taxonomy.qza \
+--i-data Taxonomy/V4/soil_dodecandra_taxonomy.qza \
+--i-data Taxonomy/V4/soil_krast_taxonomy.qza \
+--i-data Taxonomy/V4/soil_melon_taxonomy.qza \
+--i-data Taxonomy/V4/soil_mangrove_taxonomy.qza \
+--i-data Taxonomy/V4/soil_salin_weath_taxonomy.qza \
+--i-data Taxonomy/V4/soil_maiz_enrrich_taxonomy.qza \
+--i-data Taxonomy/V4/soil_crust_taxonomy.qza \
+--o-merged-data Final_set_atlas/V4/Final_V4_taxonomy.qza
+
+qiime feature-table merge-taxa --i-data Final_set_atlas/V3-V4/Final_V3-V4_taxonomy.qza \
+--i-data  Final_set_atlas/V1-V2/Final_V1-V2_taxonomy.qza \
+--i-data Final_set_atlas/V4/Final_V4_taxonomy.qza \
+--o-merged-data Final_set_atlas/All/All_taxonomy.qza
+###
+
+
+###
+#Filter non-prokaryotic sequences 
+qiime taxa filter-table --i-table Final_atlas_DS/Feature_table/Final_table_filtered.qza --i-taxonomy Final_set_atlas/All/All_taxonomy.qza --p-exclude o__Chloroplast,d__Eukaryota,f__Mitochondria,Unassigned --o-filtered-table Final_atlas_DS/Feature_table/Final_table_filtered_no_euk.qza
+
+qiime taxa filter-seqs --i-sequences Final_atlas_DS/Rep_seqs/Final_seqs_filtered.qza --i-taxonomy Final_set_atlas/All/All_taxonomy.qza --p-exclude o__Chloroplast,d__Eukaryota,f__Mitochondria,Unassigned --o-filtered-sequences Final_atlas_DS/Rep_seqs/Final_seqs_filtered_no_euk.qza
+###
+
+
+###
+#Fragment insertion for phylogeny inference
+nohup qiime fragment-insertion sepp --i-representative-sequences Data/Final_seqs_filtered_no_euk.qza --i-reference-database Data/sepp-refs-silva.qza --p-threads 40 --o-tree Frag_ins/insertion-tree.qza --o-placements Frag_ins/insertion-placements.qza &
+
+qiime fragment-insertion filter-features --i-table Feature_table/Final_table_filtered.qza --i-tree Phylogeny/insertion-tree.qza --o-filtered-table Feature_table/Final-fragment-insertion-table.qza --o-removed-table Feature_table/Final-fragment-insertion-removed-table.qza
+
+qiime feature-table filter-seqs --i-data Rep_seqs/Final_seqs_filtered.qza --i-table Feature_table/Final-fragment-insertion-table.qza --o-filtered-data Rep_seqs/Final_fragment_seqs_filtered.qza
+###
+
+
+###
+#Calculation of diversity metrics at a rarefaction depth of 40,000 seqs per sample
+qiime diversity core-metrics-phylogenetic --p-n-jobs-or-threads 10 --i-phylogeny Final_atlas_DS/Phylogeny/insertion-tree.qza --i-table Final_atlas_DS/Feature_table/Final-fragment-insertion-table.qza  --p-sampling-depth 40000 --m-metadata-file Metadata/Metadata_final_atlas_1.txt --output-dir Final_atlas_DS/Diversity_metrics_40K
+
